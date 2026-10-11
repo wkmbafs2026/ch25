@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>邊際成本法損益表 · 排位練習</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="app-header">
+  <div class="inner">
+    <div class="brand">
+      <h1>邊際成本法損益表 · 排位練習</h1>
+      <p>將項目區嘅 BAR 放返入損益表嘅正確位置</p>
+    </div>
+    <div class="stats">
+      <span class="stat" id="statPlaced">已放置 0 / 0</span>
+      <span class="stat" id="statScore">上次成績 —</span>
+      <span class="stat" id="statTries">嘗試 0 次</span>
+    </div>
+  </div>
+</header>
+
+<main>
+
+  <section class="card question">
+    <h2>題目</h2>
+    <div class="qswitch" id="qswitch"></div>
+    <div id="brief"></div>
+  </section>
+
+  <div class="workspace">
+
+    <section class="card statement" id="statement">
+      <div class="stmt-head">
+        <div class="co" id="coName">子怡公司</div>
+        <div class="ti" id="stTitle">損益表</div>
+        <div class="pd" id="stPeriod">截至 2023 年度 12 月 31 日止年度</div>
+      </div>
+      <div class="stmt-table" id="table"></div>
+    </section>
+
+    <aside class="card tray">
+      <div class="tray-head">
+        <h2>項目區</h2>
+        <span class="tray-count" id="trayCount">0 個</span>
+      </div>
+      <p class="tray-hint" id="hint">長按可以直接拖（iPad 適用），或撳一下選取、再撳目標格。</p>
+      <div class="tray-group">
+        <h3>項目名稱</h3>
+        <div class="tray-list" id="trayItems"></div>
+      </div>
+      <div class="tray-group">
+        <h3>金額</h3>
+        <div class="tray-list" id="trayAmts"></div>
+      </div>
+    </aside>
+
+  </div>
+
+  <section class="controls">
+    <button class="btn btn-primary" id="btnCheck" type="button">檢查答案</button>
+    <button class="btn" id="btnReveal" type="button">顯示答案</button>
+    <button class="btn" id="btnReset" type="button">重設</button>
+    <button class="btn" id="btnPrint" type="button">列印 / PDF</button>
+    <div class="banner hidden" id="feedback" role="status" aria-live="polite"></div>
+  </section>
+
+  <div class="modal hidden" id="pwModal" role="dialog" aria-modal="true" aria-labelledby="pwTitle">
+    <div class="modal-box">
+      <h3 id="pwTitle">教師專用：顯示答案</h3>
+      <p>請輸入 4 位密碼</p>
+      <input class="pw-input" id="pwInput" type="password" inputmode="numeric" autocomplete="off" placeholder="····">
+      <p class="pw-err hidden" id="pwErr">密碼錯誤，請再試。</p>
+      <div class="modal-btns">
+        <button class="btn btn-primary" id="pwOk" type="button">確定</button>
+        <button class="btn" id="pwCancel" type="button">取消</button>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>
