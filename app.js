@@ -27,6 +27,7 @@ const QUESTIONS = [
     { table: {
         head: ['', '$'],
         align: ['l', 'r'],
+        nature: ['var', 'var', 'var', 'fix'],
         rows: [
           ['直接原料成本', '5.3'],
           ['直接人工成本（每直接人工小時 $45）', '13.5'],
@@ -85,6 +86,7 @@ const QUESTIONS = [
     { table: {
         caption: '詳細成本資料',
         head: ['成本項目', '金額'],
+        nature: ['var', 'var', 'var', 'fix', 'var', 'fix'],
         rows: [
           ['直接原料（每生產一件）', '$200'],
           ['直接人工（每生產一件）', '$250'],
@@ -133,6 +135,7 @@ const QUESTIONS = [
     { table: {
         head: ['項目', '金額'],
         align: ['l', 'r'],
+        nature: [null, null, 'var', 'var', 'var', 'fix', 'var', 'fix', null],
         rows: [
           ['產量', '18 000 件'],
           ['銷量', '17 000 件'],
@@ -187,6 +190,7 @@ const QUESTIONS = [
         caption: '截至 2018 年 12 月 31 日止年度',
         head: ['項目', '$', '$'],
         align: ['l', 'r', 'r'],
+        nature: [null, 'var', 'var', 'fix', 'var', 'fix', 'fix', null],
         rows: [
           ['銷售', '', '1 800 000'],
           ['減：直接原料', '800 000', ''],
@@ -239,6 +243,32 @@ const QUESTIONS = [
 ];
 
 /* =========================================================
+   格式表練習（互動排格式）
+   學生將「格式列」拖入空白損益表，由上至下砌出完整格式：
+   銷貨 → 減：變動成本 → 變動明細×4 → 邊際貢獻 → 減：固定成本 → 固定明細×2 → 淨利
+   格式列用第一題（子怡公司）嘅真實項目名做例子，同類明細批改時可互換。
+   ========================================================= */
+const FMT_QI = QUESTIONS.length;   // 第 5 個 tab（0-3 係題目）
+const FMT_TAB = '格式表 · 練習';
+const FMT_EXPECTED = ['sales', 'sec-var', 'v', 'v', 'v', 'v', 'cm', 'sec-fix', 'f', 'f', 'np'];
+const FMT_TOTAL = FMT_EXPECTED.length;   // 11 格
+const FMT_BLOCKS = {
+  'f-sales':  { label: '銷貨',             type: 'sales' },
+  'f-secvar': { label: '減：變動成本',     type: 'sec-var' },
+  'f-v1':     { label: '直接原料成本',     type: 'v' },
+  'f-v2':     { label: '直接人工成本',     type: 'v' },
+  'f-v3':     { label: '變動生產間接成本', type: 'v' },
+  'f-v4':     { label: '變動銷售費用',     type: 'v' },
+  'f-cm':     { label: '邊際貢獻',         type: 'cm' },
+  'f-secfix': { label: '減：固定成本',     type: 'sec-fix' },
+  'f-f1':     { label: '固定生產間接成本', type: 'f' },
+  'f-f2':     { label: '固定銷售費用',     type: 'f' },
+  'f-np':     { label: '淨利',             type: 'np' }
+};
+
+function isFmt(){ return QI === FMT_QI; }
+
+/* =========================================================
    狀態
    ========================================================= */
 let QUESTION = QUESTIONS[0];
@@ -248,10 +278,15 @@ let QI = 0;
 const state = {
   items:     [],                 // 每行放咗邊個項目名稱
   amts:      [],                 // 每行嘅內欄 / 外欄放咗邊個金額
+  qnature:   [],                 // 題目表格學生揀嘅成本性質：按表 [{ ti, vals:[null|'var'|'fix'] }]
+  qfeedback: [],                 // 題目表格批改：按表 [[null|'ok'|'bad']]
   selected:  null,               // { kind:'item'|'amt', id }
   drag:      null,               // { kind, id }
   trayItems: [],
   trayAmts:  [],
+  fmtPlaced: [],                 // 格式表每格放咗邊個格式列（淨係格式表模式用）
+  fmtTray:   [],
+  fmtFeedback: [],               // 格式表批改：每格 'ok'|'bad'|null
   feedback:  [],                 // 每行 { item:'ok'|'bad', amt:'ok'|'bad' }
   attempts:  0,
   lastScore: null,
@@ -273,12 +308,65 @@ function esc(s){
   return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 }
 
-/* 題目資料表（成本未分類，學生要自己判斷變動／固定） */
-function tableHtml(t){
+/* 題目資料表：有 nature 陣列嗰啲會加「成本性質」欄俾學生逐行揀變動／固定
+   nature 寫法：'var' 變動 / 'fix' 固定 / null 唔使揀（例如產量、銷量、售價）。
+   老師要改答案，淨係改呢個陣列就得。 */
+function qTables(){
+  const out = [];
+  if(!QUESTION || !QUESTION.brief) return out;
+  QUESTION.brief.forEach((b, bi) => { if(b && b.table && b.table.nature) out.push({ t: b.table, bi }); });
+  return out;
+}
+
+function qNatureTotal(){
+  return qTables().reduce((n, { t }) => n + t.nature.filter(v => v === 'var' || v === 'fix').length, 0);
+}
+
+function qNaturePlaced(){
+  return state.qnature.reduce((n, tb) => n + tb.vals.filter(v => v === 'var' || v === 'fix').length, 0);
+}
+
+function tableHtml(t, ti){
   const cls = (i) => (t.align && t.align[i] === 'r') ? ' class="num"' : '';
-  const head = t.head ? `<thead><tr>${t.head.map((h, i) => `<th${cls(i)}>${esc(h)}</th>`).join('')}</tr></thead>` : '';
-  const body = `<tbody>${t.rows.map(r => `<tr>${r.map((c, i) => `<td${cls(i)}>${esc(c)}</td>`).join('')}</tr>`).join('')}</tbody>`;
+  const hasNat = !!t.nature;
+  const head = t.head ? `<thead><tr>${t.head.map((h, i) => `<th${cls(i)}>${esc(h)}</th>`).join('')}${hasNat ? '<th>成本性質</th>' : ''}</tr></thead>` : '';
+  const st = hasNat && state.qnature[ti] ? state.qnature[ti] : null;
+  const fb = hasNat && state.qfeedback[ti] ? state.qfeedback[ti] : null;
+  const body = `<tbody>${t.rows.map((r, ri) => {
+    let cells = r.map((c, i) => `<td${cls(i)}>${esc(c)}</td>`).join('');
+    if(hasNat){
+      const need = t.nature[ri] === 'var' || t.nature[ri] === 'fix';
+      if(!need){
+        cells += '<td class="qnat qnat--na">—</td>';
+      }else{
+        const cur = st ? st.vals[ri] : null;
+        const v = fb ? fb[ri] : null;
+        cells += `<td class="qnat${v ? (v === 'ok' ? ' qok' : ' qbad') : ''}">` +
+          `<span class="qnat-btns" role="group" aria-label="第 ${ri + 1} 行成本性質">` +
+          `<button type="button" class="qnat-btn${cur === 'var' ? ' active' : ''}" data-ti="${ti}" data-ri="${ri}" data-nat="var">變動</button>` +
+          `<button type="button" class="qnat-btn${cur === 'fix' ? ' active' : ''}" data-ti="${ti}" data-ri="${ri}" data-nat="fix">固定</button>` +
+          `</span>${v ? `<span class="verdict ${v === 'ok' ? 'v-ok' : 'v-bad'}">${v === 'ok' ? '✓' : '✗'}</span>` : ''}` +
+          `<span class="qnat-print">${cur === 'var' ? '變動' : cur === 'fix' ? '固定' : ''}</span></td>`;
+      }
+    }
+    return `<tr>${cells}</tr>`;
+  }).join('')}</tbody>`;
   return `<figure class="qfig">${t.caption ? `<figcaption>${esc(t.caption)}</figcaption>` : ''}<table class="qtable">${head}${body}</table></figure>`;
+}
+
+function renderBrief(){
+  if(isFmt()){ renderFmtBrief(); return; }
+  let ni = -1;
+  document.getElementById('brief').innerHTML =
+    QUESTION.brief.map(t => {
+      if(typeof t === 'string') return `<p>${esc(t)}</p>`;
+      if(t.table){
+        if(t.table.nature){ ni++; return tableHtml(t.table, ni); }
+        return tableHtml(t.table, -1);
+      }
+      if(t.list) return listHtml(t.list, t);
+      return '';
+    }).join('');
 }
 
 /* 題目有序清單（預設 (i)(ii)…；start 續編號，marker:'a' 用 (a)(b)…） */
@@ -291,6 +379,8 @@ function listHtml(items, t){
 function initState(){
   state.items     = LAYOUT.map(() => null);
   state.amts      = LAYOUT.map(() => ({ inner:null, outer:null }));
+  state.qnature   = qTables().map(({ t }) => ({ vals: t.rows.map(() => null) }));
+  state.qfeedback = qTables().map(({ t }) => t.rows.map(() => null));
   state.feedback  = LAYOUT.map(() => null);
   state.selected  = null;
   state.drag      = null;
@@ -462,6 +552,7 @@ function rowHtml(row, i){
 }
 
 function renderTable(){
+  if(isFmt()){ renderFmtTable(); return; }
   let html = `<div class="row row--cols">
                 <div class="cell"></div>
                 <div class="cell cell-amt">$</div>
@@ -472,6 +563,9 @@ function renderTable(){
 }
 
 function renderTray(){
+  if(isFmt()){ renderFmtTray(); return; }
+  document.getElementById('trayH1').textContent = '項目名稱';
+  document.getElementById('trayG2').style.display = '';
   const usedItems = new Set(state.items.filter(Boolean));
   const usedAmts  = new Set(state.amts.flatMap(c => [c.inner, c.outer]).filter(Boolean));
 
@@ -501,20 +595,29 @@ function renderTray(){
 function renderHint(){
   const h = document.getElementById('hint');
   if(state.selected){
-    const it = ITEMS[state.selected.id];
-    const what = state.selected.kind === 'item'
-      ? '名稱「' + it.label + (it.tag ? '（' + it.tag + '）' : '') + '」'
-      : '金額「' + it.amount + '」';
+    let what;
+    if(state.selected.kind === 'fmt'){
+      what = '格式列「' + FMT_BLOCKS[state.selected.id].label + '」';
+    }else{
+      const it = ITEMS[state.selected.id];
+      what = state.selected.kind === 'item'
+        ? '名稱「' + it.label + (it.tag ? '（' + it.tag + '）' : '') + '」'
+        : '金額「' + it.amount + '」';
+    }
     h.innerHTML = `已揀咗${what} → 撳損益表嘅目標格放入（再撳一次取消）。`;
     h.classList.add('active');
+  }else if(isFmt()){
+    h.textContent = '撳一下格式列揀起，再撳目標格放入（或直接拖曳）；同類明細行可以互換。';
+    h.classList.remove('active');
   }else{
-    h.textContent = '長按可以直接拖（iPad 適用），或撳一下選取、再撳目標格。名稱拖去描述欄、金額（連總額）拖去啱嘅金額欄；「減：變動成本」同「減：固定成本」下面各行位置都可以互換。';
+    h.textContent = '先喺題目表格每行撳「變動／固定」，再將名稱同金額拖入損益表；「減：變動成本」同「減：固定成本」下面各行位置都可以互換。';
     h.classList.remove('active');
   }
 }
 
 function renderStats(){
-  const placed = state.items.filter(Boolean).length + amtCount();
+  const placed = isFmt() ? fmtPlacedCount()
+    : state.items.filter(Boolean).length + amtCount() + qNaturePlaced();
   document.getElementById('statPlaced').textContent = `已放置 ${placed} / ${TOTAL}`;
   document.getElementById('statScore').textContent  =
     state.lastScore == null ? '上次成績 —' : `上次成績 ${state.lastScore} / ${TOTAL}`;
@@ -522,6 +625,7 @@ function renderStats(){
 }
 
 function renderAll(){
+  renderBrief();
   renderTable();
   renderTray();
   renderHint();
@@ -533,6 +637,7 @@ function renderAll(){
    ========================================================= */
 function afterChange(){
   state.feedback = LAYOUT.map(() => null);
+  state.qfeedback = qTables().map(({ t }) => t.rows.map(() => null));
   state.selected  = null;
   renderAll();
 }
@@ -563,6 +668,7 @@ function placeAmt(id, row, col){
 }
 
 function returnToTray(kind, id){
+  if(kind === 'fmt'){ returnFmtToTray(id); return; }
   if(kind === 'item'){
     const idx = state.items.indexOf(id);
     if(idx >= 0) state.items[idx] = null;
@@ -582,10 +688,190 @@ function setBanner(msg, type){
   b.textContent = msg;
 }
 
+function setQNature(ti, ri, val){
+  const tb = state.qnature[ti];
+  if(!tb) return;
+  tb.vals[ri] = (tb.vals[ri] === val) ? null : val;   // 再撳一次取消
+  const fbt = state.qfeedback[ti];
+  if(fbt) fbt[ri] = null;
+  state.feedback = LAYOUT.map(() => null);
+  state.selected = null;
+  renderAll();
+}
+
+/* =========================================================
+   格式表練習嘅操作同渲染（損益表唔郁，淨係呢度）
+   ========================================================= */
+function initFmtState(){
+  state.items     = [];
+  state.amts      = [];
+  state.qnature   = [];
+  state.qfeedback = [];
+  state.feedback  = [];
+  state.fmtPlaced   = FMT_EXPECTED.map(() => null);
+  state.fmtFeedback = FMT_EXPECTED.map(() => null);
+  state.fmtTray     = shuffle(Object.keys(FMT_BLOCKS));
+  state.selected  = null;
+  state.drag      = null;
+  state.showFormula = false;
+  state.td = null;
+  state.touchSuppressUntil = 0;
+  state.attempts  = 0;
+  state.lastScore = null;
+}
+
+function fmtPlacedCount(){
+  return state.fmtPlaced.filter(Boolean).length;
+}
+
+function fmtAfterChange(){
+  state.fmtFeedback = FMT_EXPECTED.map(() => null);
+  state.selected = null;
+  renderAll();
+}
+
+function placeFmt(id, slot){
+  if(slot < 0 || slot >= FMT_EXPECTED.length || !FMT_BLOCKS[id]) return;
+  const from = state.fmtPlaced.indexOf(id);
+  if(from === slot){ state.selected = null; renderAll(); return; }
+  const occupant = state.fmtPlaced[slot];
+  if(from >= 0) state.fmtPlaced[from] = occupant;
+  state.fmtPlaced[slot] = id;
+  fmtAfterChange();
+}
+
+function returnFmtToTray(id){
+  const idx = state.fmtPlaced.indexOf(id);
+  if(idx >= 0) state.fmtPlaced[idx] = null;
+  if(state.selected && state.selected.id === id) state.selected = null;
+  fmtAfterChange();
+}
+
+function fmtBar(id, mode){
+  const b = FMT_BLOCKS[id];
+  const picked = state.selected && state.selected.kind === 'fmt' && state.selected.id === id;
+  const sec = (b.type === 'sec-var' || b.type === 'sec-fix');
+  if(mode === 'tray'){
+    return `<div class="bar bar--tray${picked ? ' selected' : ''}" draggable="true"
+                 tabindex="0" role="button" data-kind="fmt" data-id="${id}"
+                 title="撳一下揀起，再撳目標格放入">
+              <span class="lbl${sec ? ' fmt-sec' : ''}">${esc(b.label)}</span>
+            </div>`;
+  }
+  return `<div class="bar bar--fmt-in${picked ? ' selected' : ''}" draggable="true"
+               tabindex="0" role="button" data-kind="fmt" data-id="${id}"
+               title="撳一下揀起，再撳目標格放入">
+            <span class="lbl${sec ? ' fmt-sec' : ''}">${esc(b.label)}</span>
+            <button class="ret" type="button" title="放返格式區" aria-label="放返格式區">↩</button>
+          </div>`;
+}
+
+function renderFmtTable(){
+  let html = `<div class="fmt-cols"><span></span><span>$</span><span>$</span></div>`;
+  /* 底線位置同真實報表一樣：最後一行變動明細單線、最後一行固定明細單線、淨利雙線 */
+  const lastV = FMT_EXPECTED.lastIndexOf('v');
+  const lastF = FMT_EXPECTED.lastIndexOf('f');
+  const npIdx = FMT_EXPECTED.indexOf('np');
+  FMT_EXPECTED.forEach((exp, i) => {
+    const id = state.fmtPlaced[i];
+    const fb = state.fmtFeedback[i];
+    const cls = ['fmt-slot', 'zone'];
+    if(id) cls.push('filled');
+    if(fb) cls.push(fb === 'ok' ? 'ok' : 'bad');
+    if(id){
+      if(i === lastV || i === lastF) cls.push('u');
+      if(i === npIdx) cls.push('dbl');
+    }
+    let inner;
+    if(id){
+      const b = FMT_BLOCKS[id];
+      if(b.type === 'sec-var' || b.type === 'sec-fix'){
+        inner = fmtBar(id, 'cell') + verdict(fb);
+      }else{
+        inner = `<div class="fmt-grid"><div class="fmt-label">${fmtBar(id, 'cell')}</div><div class="fmt-amt">$</div><div class="fmt-amt">$</div></div>` + verdict(fb);
+      }
+    }else{
+      inner = `<span class="zempty">拖入格式列（第 ${i + 1} 格）</span>` + verdict(fb);
+    }
+    html += `<div class="${cls.join(' ')}" data-row="${i}" data-zone="fmtslot" tabindex="0" role="button" aria-label="格式第 ${i + 1} 格">${inner}</div>`;
+  });
+  document.getElementById('table').innerHTML = html;
+}
+
+function renderFmtTray(){
+  const used = new Set(state.fmtPlaced.filter(Boolean));
+  const ids = state.fmtTray.filter(id => !used.has(id));
+  document.getElementById('trayCount').textContent = ids.length + ' 個';
+  document.getElementById('trayH1').textContent = '格式列';
+  document.getElementById('trayG2').style.display = 'none';
+  const itemsEl = document.getElementById('trayItems');
+  document.getElementById('trayAmts').innerHTML = '';
+  itemsEl.innerHTML = ids.length
+    ? ids.map(id => fmtBar(id, 'tray')).join('')
+    : `<div class="tray-empty">格式列放晒 ✅<span>撳「檢查答案」睇下啱唔啱</span></div>`;
+}
+
+function renderFmtBrief(){
+  document.getElementById('brief').innerHTML =
+    `<p>以下係空白嘅邊際成本法損益表。將右邊「格式列」拖（或撳一下再撳目標格）入正確位置，由上至下砌出完整格式：一共 ${FMT_TOTAL} 格，包括銷貨、變動成本小節、邊際貢獻、固定成本小節同淨利。</p>`;
+}
+
+function checkFmt(){
+  const placed = fmtPlacedCount();
+  if(placed < FMT_TOTAL){
+    setBanner(`仲有 ${FMT_TOTAL - placed} 格未放，放晒先檢查啦。`, 'warn');
+    return;
+  }
+  state.attempts++;
+  let score = 0;
+  state.fmtFeedback = FMT_EXPECTED.map((exp, i) => {
+    const ok = !!state.fmtPlaced[i] && FMT_BLOCKS[state.fmtPlaced[i]].type === exp;
+    if(ok) score++;
+    return ok ? 'ok' : 'bad';
+  });
+  state.lastScore = score;
+  if(score === FMT_TOTAL){
+    setBanner(`全對！${score} / ${FMT_TOTAL} · 第 ${state.attempts} 次完成 🎉`, 'ok');
+    celebrate();
+  }else{
+    setBanner(`答啱 ${score} / ${FMT_TOTAL}，紅色嗰格再諗吓（已經試咗 ${state.attempts} 次）。`, 'warn');
+  }
+  renderAll();
+}
+
+function revealFmt(){
+  const pool = {};
+  Object.keys(FMT_BLOCKS).forEach(id => {
+    const tp = FMT_BLOCKS[id].type;
+    (pool[tp] = pool[tp] || []).push(id);
+  });
+  state.fmtPlaced = FMT_EXPECTED.map(exp => pool[exp].shift());
+  state.fmtFeedback = FMT_EXPECTED.map(() => null);
+  state.selected = null;
+  setBanner('已經顯示標準格式，對照吓自己嘅排法，再撳「重設」試多次。', 'info');
+  renderAll();
+}
+
+function loadFmt(silent){
+  QUESTION = null;
+  ITEMS = {};
+  LAYOUT = [];
+  BAR_ROWS = [];
+  TOTAL = FMT_TOTAL;
+  initFmtState();
+  document.getElementById('coName').textContent   = '子怡公司';
+  document.getElementById('stTitle').textContent  = '損益表';
+  document.getElementById('stPeriod').textContent = '截至 2023 年度 12 月 31 日止年度';
+  renderQSwitch();
+  if(!silent) setBanner('已切換到「格式表練習」，將格式列排入正確位置砌出損益表格式！', 'info');
+  renderAll();
+}
+
 function check(){
-  const placed = state.items.filter(Boolean).length + amtCount();
+  if(isFmt()){ checkFmt(); return; }
+  const placed = state.items.filter(Boolean).length + amtCount() + qNaturePlaced();
   if(placed < TOTAL){
-    setBanner(`仲有 ${TOTAL - placed} 個未放好，放晒先檢查啦。`, 'warn');
+    setBanner(`仲有 ${TOTAL - placed} 個未放好（包括題目表格成本性質未揀），放晒先檢查啦。`, 'warn');
     return;
   }
 
@@ -612,6 +898,16 @@ function check(){
     score += (itemOk ? 1 : 0) + (amtOk ? 1 : 0) + (r.outerExpect ? (extraOk ? 1 : 0) : 0);
   });
 
+  /* 題目表格成本性質（學生逐行揀，對照老師喺 nature 設嘅答案） */
+  qTables().forEach(({ t }, ti) => {
+    t.nature.forEach((ans, ri) => {
+      if(ans !== 'var' && ans !== 'fix') return;
+      const ok = state.qnature[ti].vals[ri] === ans;
+      state.qfeedback[ti][ri] = ok ? 'ok' : 'bad';
+      if(ok) score++;
+    });
+  });
+
   state.lastScore = score;
 
   if(score === TOTAL){
@@ -624,6 +920,12 @@ function check(){
 }
 
 function reset(){
+  if(isFmt()){
+    initFmtState();
+    setBanner('已經重設，格式列重新洗牌，再試多次！', 'info');
+    renderAll();
+    return;
+  }
   initState();
   setBanner('已經重設，項目重新洗牌，再試多次！', 'info');
   renderAll();
@@ -655,10 +957,18 @@ function submitPw(){
 }
 
 function reveal(){
+  if(isFmt()){ revealFmt(); return; }
   BAR_ROWS.forEach(({ r, i }) => {
     state.items[i] = r.id;
     state.amts[i][ITEMS[r.id].col] = r.id;
     if(r.outerExpect) state.amts[i]['outer'] = r.outerExpect;
+  });
+  /* 題目表格成本性質標準答案 */
+  qTables().forEach(({ t }, ti) => {
+    t.nature.forEach((ans, ri) => {
+      if(ans === 'var' || ans === 'fix') state.qnature[ti].vals[ri] = ans;
+    });
+    state.qfeedback[ti] = t.rows.map(() => null);
   });
   state.feedback = LAYOUT.map(() => null);
   state.showFormula = true;
@@ -699,7 +1009,7 @@ document.addEventListener('dragend', e => {
 document.addEventListener('dragover', e => {
   const z = e.target.closest && e.target.closest('.zone');
   if(!z || !state.drag) return;
-  const want = z.dataset.zone === 'desc' ? 'item' : 'amt';
+  const want = z.dataset.zone === 'desc' ? 'item' : z.dataset.zone === 'fmtslot' ? 'fmt' : 'amt';
   if(state.drag.kind !== want) return;
   e.preventDefault();
   if(e.dataTransfer) e.dataTransfer.dropEffect = 'move';
@@ -726,6 +1036,8 @@ document.addEventListener('drop', e => {
     if(d.kind === 'item') placeItem(d.id, row);
   }else if(d.kind === 'amt'){
     placeAmt(d.id, row, col);
+  }else if(col === 'fmtslot'){
+    if(d.kind === 'fmt') placeFmt(d.id, row);
   }
   state.drag = null;
 });
@@ -771,7 +1083,7 @@ function touchHighlight(x, y){
   const el = document.elementFromPoint(x, y);
   const z = el && el.closest ? el.closest('.zone') : null;
   if(!z) return;
-  const want = z.dataset.zone === 'desc' ? 'item' : 'amt';
+  const want = z.dataset.zone === 'desc' ? 'item' : z.dataset.zone === 'fmtslot' ? 'fmt' : 'amt';
   if(td.kind !== want) return;
   z.classList.add('over');
   td.zone = z;
@@ -850,6 +1162,8 @@ function endTouchDrag(cancelled){
         if(td.kind === 'item') placeItem(td.id, row);
       }else if(td.kind === 'amt'){
         placeAmt(td.id, row, col);
+      }else if(col === 'fmtslot'){
+        if(td.kind === 'fmt') placeFmt(td.id, row);
       }
     }
     state.touchSuppressUntil = Date.now() + 600;   // 食咗跟住嚟嘅合成 click
@@ -861,6 +1175,12 @@ document.addEventListener('touchcancel', () => endTouchDrag(true));
 
 document.addEventListener('click', e => {
   if(Date.now() < (state.touchSuppressUntil || 0)){ state.touchSuppressUntil = 0; return; }
+  const qn = e.target.closest && e.target.closest('.qnat-btn');
+  if(qn){
+    e.stopPropagation();
+    setQNature(Number(qn.dataset.ti), Number(qn.dataset.ri), qn.dataset.nat);
+    return;
+  }
   const ret = e.target.closest && e.target.closest('.ret');
   if(ret){
     e.stopPropagation();
@@ -890,6 +1210,8 @@ document.addEventListener('click', e => {
       if(state.selected.kind === 'item') placeItem(state.selected.id, row);
     }else if(state.selected.kind === 'amt'){
       placeAmt(state.selected.id, row, col);
+    }else if(col === 'fmtslot'){
+      if(state.selected.kind === 'fmt') placeFmt(state.selected.id, row);
     }
   }
 });
@@ -908,6 +1230,8 @@ document.addEventListener('keydown', e => {
       if(state.selected.kind === 'item') placeItem(state.selected.id, row);
     }else if(state.selected.kind === 'amt'){
       placeAmt(state.selected.id, row, col);
+    }else if(col === 'fmtslot'){
+      if(state.selected.kind === 'fmt') placeFmt(state.selected.id, row);
     }
   }
 });
@@ -935,28 +1259,22 @@ document.getElementById('btnPrint').addEventListener('click', () => window.print
 function renderQSwitch(){
   document.getElementById('qswitch').innerHTML = QUESTIONS.map((q, i) =>
     `<button class="qbtn${i === QI ? ' active' : ''}" type="button" data-q="${i}">${esc(q.tab)}</button>`
-  ).join('');
+  ).join('') + `<button class="qbtn${QI === FMT_QI ? ' active' : ''}" type="button" data-q="${FMT_QI}">${esc(FMT_TAB)}</button>`;
 }
 
 function loadQuestion(i, silent){
   QI = i;
+  if(isFmt()){ loadFmt(silent); return; }
   QUESTION = QUESTIONS[i];
   ITEMS = QUESTION.items;
   Object.keys(ITEMS).forEach(id => { ITEMS[id].id = id; });   // 俾每項攞返自己嘅 id
   LAYOUT = QUESTION.layout;
   BAR_ROWS = LAYOUT.map((r, idx) => ({ r, i: idx })).filter(x => x.r.t === 'bar');
-  TOTAL = BAR_ROWS.length * 2 + LAYOUT.filter(r => r.outerExpect).length;
+  initState();
+  TOTAL = BAR_ROWS.length * 2 + LAYOUT.filter(r => r.outerExpect).length + qNatureTotal();
   document.getElementById('coName').textContent   = QUESTION.company;
   document.getElementById('stTitle').textContent  = QUESTION.title;
   document.getElementById('stPeriod').textContent = QUESTION.period;
-  document.getElementById('brief').innerHTML =
-    QUESTION.brief.map(t => {
-      if(typeof t === 'string') return `<p>${esc(t)}</p>`;
-      if(t.table) return tableHtml(t.table);
-      if(t.list) return listHtml(t.list, t);
-      return '';
-    }).join('');
-  initState();
   renderQSwitch();
   if(!silent) setBanner(`已切換到「${QUESTION.tab}」，項目重新洗牌，加油！`, 'info');
   renderAll();

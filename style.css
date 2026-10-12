@@ -89,7 +89,6 @@ main{max-width:1240px;margin:0 auto;padding:18px 16px 56px}
 .qtable th,.qtable td{border:1px solid var(--edge);padding:7px 12px;text-align:left}
 .qtable thead th{background:var(--accent-soft);color:#3730a3;font-size:13px;letter-spacing:.08em;white-space:nowrap}
 .qtable tbody tr:nth-child(even){background:#f8fafc}
-.qtable td:last-child,.qtable th:last-child{text-align:right;font-variant-numeric:tabular-nums}
 .qtable td.num,.qtable th.num{text-align:right;font-variant-numeric:tabular-nums}
 
 /* 題目有序清單（(i)(ii)…） */
@@ -105,6 +104,23 @@ main{max-width:1240px;margin:0 auto;padding:18px 16px 56px}
   color:var(--accent);font-weight:700;
 }
 .qlist.alpha li::before{content:"(" counter(qi, lower-alpha) ")";}
+
+/* 題目表格成本性質（學生逐行揀變動／固定） */
+.qnat{white-space:nowrap;text-align:center}
+.qnat--na{color:#cbd5e1}
+.qnat.qok{background:var(--ok-soft)}
+.qnat.qbad{background:var(--bad-soft)}
+.qnat-btns{display:inline-flex;gap:4px}
+.qnat-btn{
+  font:inherit;font-size:12px;font-weight:600;
+  padding:2px 10px;border-radius:999px;cursor:pointer;
+  border:1px solid var(--edge);background:#f8fafc;color:#64748b;
+  transition:.12s;white-space:nowrap;
+}
+.qnat-btn:hover{border-color:var(--accent);color:var(--accent)}
+.qnat-btn.active{background:var(--accent);border-color:var(--accent);color:#fff}
+.qnat .verdict{margin-left:5px}
+.qnat-print{display:none}
 
 .workspace{display:flex;gap:18px;align-items:flex-start}
 
@@ -335,6 +351,72 @@ main{max-width:1240px;margin:0 auto;padding:18px 16px 56px}
   padding:0 5px;margin-left:6px;white-space:nowrap;
 }
 
+/* ---------- 格式表練習（空白損益表格式格） ---------- */
+.fmt-slot{
+  border:1.5px dashed var(--edge);
+  border-radius:7px;
+  margin:4px 0;
+  background:#fbfcfe;
+  min-height:34px;
+  display:flex;align-items:center;gap:7px;
+  padding:5px 8px;
+  cursor:pointer;
+  transition:border-color .12s,background .12s,box-shadow .12s;
+  outline:none;
+}
+.fmt-slot.filled{border-color:transparent;background:transparent}
+.fmt-slot.ok{border-color:var(--ok)}
+.fmt-slot.bad{border-color:var(--bad);animation:shake .3s}
+.fmt-slot:focus-visible{box-shadow:0 0 0 3px rgba(79,70,229,.35)}
+.fmt-slot.over{background:var(--accent-soft);box-shadow:inset 0 0 0 2px rgba(79,70,229,.55)}
+.bar--fmt-in{
+  display:flex;align-items:center;gap:5px;
+  width:100%;padding:1px 2px;border-radius:5px;
+  font-size:15.5px;min-width:0;
+}
+.bar--fmt-in:hover{background:#f1f5f9}
+.bar--fmt-in.selected{background:var(--accent-soft);box-shadow:0 0 0 2px var(--accent)}
+.bar--fmt-in .lbl{font-weight:600}
+.bar--fmt-in .ret{
+  margin-left:auto;opacity:0;
+  border:1px solid var(--edge);background:#fff;color:#64748b;
+  border-radius:5px;width:22px;height:20px;line-height:1;
+  font-size:12px;cursor:pointer;transition:opacity .12s;flex:none;
+}
+.bar--fmt-in:hover .ret,.bar--fmt-in.selected .ret{opacity:1}
+.bar--fmt-in .ret:hover{background:#f1f5f9;color:var(--accent);border-color:var(--accent)}
+.fmt-sec{
+  text-decoration:underline;
+  text-underline-offset:4px;
+  text-decoration-thickness:1px;
+  font-weight:700;
+}
+/* 格式表頂部 $ $ 欄（同真實報表一樣，純格式、冇數字） */
+.fmt-cols{
+  display:grid;
+  grid-template-columns:1fr 120px 130px;
+  border-top:1.5px solid var(--line);
+  padding:5px 8px;
+  font-size:15px;
+  font-family:var(--serif);
+}
+.fmt-cols span:nth-child(2),.fmt-cols span:nth-child(3){text-align:right}
+/* 格式表每一格入面嘅三欄（名稱＋內欄$＋外欄$，純格式、冇數字） */
+.fmt-grid{
+  display:grid;
+  grid-template-columns:1fr 120px 130px;
+  align-items:center;
+  width:100%;
+  min-width:0;
+}
+.fmt-label{min-width:0}
+.fmt-amt{text-align:right;color:#c3ccd8;font-size:13px;padding:1px 2px}
+.fmt-slot.u .fmt-amt{border-bottom:1px solid var(--line)}
+.fmt-slot.dbl .fmt-amt{border-bottom:3px double var(--line)}
+@media (max-width:640px){
+  .fmt-cols,.fmt-grid{grid-template-columns:1fr 84px 92px}
+}
+
 /* ---------- 按鈕 ---------- */
 .controls{margin-top:18px;display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 .btn{
@@ -386,14 +468,18 @@ main{max-width:1240px;margin:0 auto;padding:18px 16px 56px}
 /* ---------- 列印 ---------- */
 @media print{
   body{background:#fff}
-  .app-header,.question,.tray,.controls,.banner,.modal{display:none !important}
+  .app-header,.tray,.controls,.banner,.modal,#qswitch{display:none !important}
   main{padding:0;max-width:none}
+  .question{box-shadow:none;margin-bottom:10px}
+  .qnat-btns{display:none !important}
+  .qnat-print{display:inline !important}
   .statement{box-shadow:none;padding:0;border-radius:0}
   .row--slot{border-color:transparent !important;background:none !important;margin:0}
   .zempty,.grip,.ret{display:none !important}
   .cell.ok,.cell.bad{background:none !important}
   .row--slot.ok,.row--slot.bad{background:none !important;border-color:transparent !important}
   .verdict{display:none !important}
-  .bar--item,.bar--amt-in{box-shadow:none !important;background:none !important}
+  .bar--item,.bar--amt-in,.bar--fmt-in{box-shadow:none !important;background:none !important}
+  .fmt-slot{border-color:transparent !important;background:none !important;margin:4px 0}
   @page{margin:1.6cm}
 }
